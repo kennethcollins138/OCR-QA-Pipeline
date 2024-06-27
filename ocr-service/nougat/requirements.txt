@@ -1,0 +1,4 @@
+flask==2.1.2
+requests==2.26.0
+nougat-ocr==0.1.0
+transformers==4.25.1

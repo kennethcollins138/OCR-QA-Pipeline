@@ -1,0 +1,5 @@
+flask==2.1.2
+requests==2.26.0
+torch==2.1.2
+surya-ocr==0.1.0
+opencv-python-headless==4.5.5.64
