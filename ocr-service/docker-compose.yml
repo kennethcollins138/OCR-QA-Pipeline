@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  classifier:
+    build:
+      context: ./classifier
+    ports:
+      - "8000:8000"
+
+  tesseract:
+    build:
+      context: ./tesseract
+    ports:
+      - "5000:5000"
+
+  nougat:
+    build:
+      context: ./nougat
+    ports:
+      - "6000:6000"
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+
+  surya:
+    build:
+      context: ./surya
+    ports:
+      - "7000:7000"
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+
+  orchestrator:
+    build:
+      context: ./orchestrator
+    ports:
+      - "8001:8001"
+    depends_on:
+      - classifier
+      - tesseract
+      - nougat
+      - surya
