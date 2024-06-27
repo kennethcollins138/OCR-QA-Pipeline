@@ -1,0 +1,38 @@
+{
+    "user_id": "123458912",
+    "document": {
+        "document_id": "123455512457890",
+        "file_path": "sharedvolume/path/to/document.pdf",
+        "document_type": "scientific",
+        "uploaded_at": "2022-11-15T12:24:00Z"
+    },
+    "process": {
+        "status": "uploaded",
+        "last_updated": "2022-11-15T12:24:00Z",
+        "model_used": "nougat"
+    },
+    "pages": [
+        {
+            "page_number": 1,
+            "raw_content": "Base64_encoded_page_content_or_link",
+            "ocr_result": "Extracted text from OCR for page 1"
+        },
+        {
+            "page_number": 2,
+            "raw_content": "Base64_encoded_page_content_or_link",
+            "ocr_result": "Extracted text from OCR for page 2"
+        }
+    ],
+    "errors": [
+        {
+            "timestamp": "2022-11-15T12:25:00Z",
+            "message": "Error message describing what went wrong"
+        }
+    ],
+    "model_config": {
+        "selected_pages": "1-4",
+        "other_options": {
+            "example_option": "example_value"
+        }
+    }
+}
