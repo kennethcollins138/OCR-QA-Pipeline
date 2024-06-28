@@ -10,3 +10,5 @@ OCR-QA-Pipeline is a comprehensive project that automates text extraction from v
 
 - Starting out with OCR pipeline. This consists of a lot of management for containers.
 - First issue, How will I pass information between the containers? For testing purposes, I will start out with a shared volume. I will transition to a NFS once fleshed out and OCR is tested. After testing, I will move to the NFS system like stated and transition to the LLM.
+
+videos/135_modern_logging

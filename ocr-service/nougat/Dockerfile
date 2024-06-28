@@ -1,13 +1,28 @@
+# Use NVIDIA CUDA image with cuDNN for GPU support
 FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 
+# Set the working directory
 WORKDIR /app
 
+# Install dependencies
 RUN apt-get update && \
-    apt-get install -y software-properties-common git wget poppler-utils && \
-    apt-get install -y python3.10 python3-pip
+    apt-get install -y software-properties-common git wget poppler-utils python3.10 python3-pip
 
-RUN pip3 install nougat-ocr==0.1.0 transformers==4.25.1 requests==2.26.0 torch==1.9.0 pypdf==3.0.0 tqdm==4.62.3 pathlib==1.0.1
+# Copy requirements.txt and install Python dependencies
+COPY requirements.txt /app/requirements.txt
+RUN pip3 install --no-cache-dir -r /app/requirements.txt
 
+# Copy the current directory contents into the container
 COPY . /app
 
-CMD ["python3", "nougat_ocr.py"]
+# List files for debugging
+RUN ls -al /app
+
+# Expose the port Flask will run on
+EXPOSE 5000
+
+# Define environment variable for Flask
+ENV FLASK_APP=nougat_ocr.py
+
+# Run the Flask app
+CMD ["flask", "run", "--host=0.0.0.0"]

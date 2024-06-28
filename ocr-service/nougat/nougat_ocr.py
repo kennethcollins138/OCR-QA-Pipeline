@@ -23,7 +23,7 @@ from jsonschema import validate
 from flask import Flask, request, jsonify
 
 # Initialize Flask app
-nougat_app = Flask(__name__)
+nougat_ocr = Flask(__name__)
 logger = logging.getLogger(__name__)
 
 def setup_logging():
@@ -193,8 +193,8 @@ def get_args(pdf_path: str, small: bool = False):
     
     return args
 
-@nougat_app.route('/run_nougat', methods=['POST'])
-async def run_nougat() -> dict:
+@nougat_ocr.route('/run_nougat', methods=['POST'])
+async def run_nougat():
     start_time = time.time()
     setup_logging()
     
@@ -204,9 +204,113 @@ async def run_nougat() -> dict:
     except jsonschema.exceptions.ValidationError as e:
         logger.error(f"JSON validation error: {e}")
         return jsonify({"error": f"Invalid JSON format: {e.message}"}), 400
-    
-    pass
 
+    file_path = document_config['document']['file_path']
+    document_id = document_config['document']['document_id']
+    directory = os.path.dirname(file_path)
 
+    # Ensure the directory exists
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
+    # Check if file exists in the shared volume
+    if not os.path.exists(file_path):
+        logger.error(f"File not found in shared volume: {file_path}")
+        document_config['errors'].append({
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "message": f"File not found: {file_path}"
+        })
+        return jsonify(document_config), 404
 
+    # Process the PDF with Nougat
+    try:
+        args = get_args(file_path, small=False)
+        base_model = NougatModel.from_pretrained(args.checkpoint)
+        base_model = move_to_device(base_model, bf16=not args.full_precision, cuda=args.batchsize > 0)
+        base_model.eval()
+
+        small_args = get_args(file_path, small=True)
+        small_model = NougatModel.from_pretrained(small_args.checkpoint)
+        small_model = move_to_device(small_model, bf16=not small_args.full_precision, cuda=small_args.batchsize > 0)
+        small_model.eval()
+
+        dataset = LazyDataset(
+            args.pdf[0],
+            partial(base_model.encoder.prepare_input, random_padding=False),
+            args.pages
+        )
+        dataloader = torch.utils.data.DataLoader(
+            ConcatDataset([dataset]),
+            batch_size=1,
+            shuffle=False,
+            collate_fn=LazyDataset.ignore_none_collate
+        )
+
+        predictions = []
+        failed_pages = []
+
+        def process_page(sample, model, use_markdown):
+            try:
+                output = model.inference(image_tensors=sample, early_stopping=False)
+                page_predictions = []
+                for j, prediction in enumerate(output["predictions"]):
+                    if use_markdown:
+                        prediction = markdown_compatible(prediction)
+                    page_predictions.append(prediction)
+                return {"success": True, "predictions": page_predictions}
+            except Exception as e:
+                logger.error(f"Error processing page: {e}")
+                return {"success": False}
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {executor.submit(process_page, sample, base_model, args.markdown): sample for sample, _ in dataloader}
+
+            for future in as_completed(futures):
+                result = future.result()
+                if result["success"]:
+                    predictions.extend(result["predictions"])
+                else:
+                    failed_pages.append(futures[future])
+
+        # Process failed pages with small model
+        if failed_pages:
+            logger.info(f"Retrying {len(failed_pages)} failed pages with the small model.")
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = {executor.submit(process_page, sample, small_model, args.markdown): sample for sample in failed_pages}
+
+                for future in as_completed(futures):
+                    result = future.result()
+                    if result["success"]:
+                        predictions.extend(result["predictions"])
+                    else:
+                        logger.error(f"Page failed even with the small model.")
+                        document_config['errors'].append({
+                            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                            "message": "Page failed even with the small model."
+                        })
+
+        # Update the document_config with predictions
+        for page_number, prediction in enumerate(predictions, start=1):
+            document_config['pages'].append({
+                "page_number": page_number,
+                "raw_content": "",  # Haven't decided this yet, will model want to be able to pull images in convo?
+                "ocr_result": prediction
+            })
+
+        elapsed_time = time.time() - start_time
+        logger.info(f"Processing completed in {elapsed_time:.2f} seconds.")
+        document_config['process']['status'] = "completed"
+        document_config['process']['last_updated'] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+
+        return jsonify(document_config)
+
+    except Exception as e:
+        logger.error(f"Error during Nougat processing: {e}")
+        document_config['errors'].append({
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "message": f"Error during processing: {e}"
+        })
+        return jsonify(document_config), 500
+
+if __name__ == "__main__":
+    nougat_ocr.run(host='0.0.0.0', port=5000)
