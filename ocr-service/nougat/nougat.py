@@ -1,11 +1,14 @@
 import sys
-from pathlib import Path
+import pathlib
 import logging
 import re
 import argparse
-import re
 import os
+import json
+import atexit
+import time
 from functools import partial
+import requests
 import torch
 from torch.utils.data import ConcatDataset
 from tqdm import tqdm
@@ -17,15 +20,80 @@ from nougat.postprocessing import markdown_compatible
 import pypdf
 import jsonschema
 from jsonschema import validate
+from flask import Flask, request, jsonify
 
-logging.basicConfig(level=logging.INFO)
+# Initialize Flask app
+nougat_app = Flask(__name__)
+logger = logging.getLogger(__name__)
 
+def setup_logging():
+    config_file = pathlib.Path("logging_configs/queued-stderr-json-file.json")
+    with open(config_file) as f_in:
+        config = json.load(f_in)
+    logging.config.dictConfig(config)
+    queue_handler = logging.getLogger().handlers[0]
+    if queue_handler:
+        queue_handler.listener.start()
+        atexit.register(queue_handler.listener.stop)
 
-'''
-This code is taken from the predict.py method from Nougat github. Automating the CLI interface with python to handle data ingestion and computation.
-Other than the automation, functionality is the same.
-'''
-
+def validate_json(data):
+    schema = {
+        "type": "object",
+        "properties": {
+            "user_id": {"type": "string"},
+            "document": {
+                "type": "object",
+                "properties": {
+                    "document_id": {"type": "string"},
+                    "file_path": {"type": "string"},
+                    "document_type": {"type": "string"},
+                    "uploaded_at": {"type": "string"}
+                },
+                "required": ["document_id", "file_path", "document_type", "uploaded_at"]
+            },
+            "process": {
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string"},
+                    "last_updated": {"type": "string"}
+                },
+                "required": ["status", "last_updated"]
+            },
+            "pages": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "page_number": {"type": "integer"},
+                        "raw_content": {"type": "string"},
+                        "ocr_result": {"type": "string"}
+                    },
+                    "required": ["page_number", "raw_content", "ocr_result"]
+                }
+            },
+            "errors": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "timestamp": {"type": "string"},
+                        "message": {"type": "string"}
+                    },
+                    "required": ["timestamp", "message"]
+                }
+            },
+            "model_config": {
+                "type": "object",
+                "properties": {
+                    "selected_pages": {"type": "string"},
+                    "other_options": {"type": "object"}
+                },
+                "required": ["selected_pages"]
+            }
+        },
+        "required": ["user_id", "document", "process", "pages", "model_config"]
+    }
+    validate(instance=data, schema=schema)
 
 def get_args(pdf_path: str, small: bool = False):
     """
@@ -125,66 +193,20 @@ def get_args(pdf_path: str, small: bool = False):
     
     return args
 
-
-async def run_nougat(document_config: dict) -> dict:
+@nougat_app.route('/run_nougat', methods=['POST'])
+async def run_nougat() -> dict:
+    start_time = time.time()
+    setup_logging()
+    
+    document_config = request.get_json()
+    try:
+        validate_json(document_config)
+    except jsonschema.exceptions.ValidationError as e:
+        logger.error(f"JSON validation error: {e}")
+        return jsonify({"error": f"Invalid JSON format: {e.message}"}), 400
+    
     pass
 
 
-def validate_json(data):
-    schema = {
-        "type": "object",
-        "properties": {
-            "user_id": {"type": "string"},
-            "document": {
-                "type": "object",
-                "properties": {
-                    "document_id": {"type": "string"},
-                    "file_path": {"type": "string"},
-                    "document_type": {"type": "string"},
-                    "uploaded_at": {"type": "string"}
-                },
-                "required": ["document_id", "file_path", "document_type", "uploaded_at"]
-            },
-            "process": {
-                "type": "object",
-                "properties": {
-                    "status": {"type": "string"},
-                    "last_updated": {"type": "string"}
-                },
-                "required": ["status", "last_updated"]
-            },
-            "pages": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "page_number": {"type": "integer"},
-                        "raw_content": {"type": "string"},
-                        "ocr_result": {"type": "string"}
-                    },
-                    "required": ["page_number", "raw_content", "ocr_result"]
-                }
-            },
-            "errors": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "timestamp": {"type": "string"},
-                        "message": {"type": "string"}
-                    },
-                    "required": ["timestamp", "message"]
-                }
-            },
-            "model_config": {
-                "type": "object",
-                "properties": {
-                    "selected_pages": {"type": "string"},
-                    "other_options": {"type": "object"}
-                },
-                "required": ["selected_pages"]
-            }
-        },
-        "required": ["user_id", "document", "process", "pages", "model_config"]
-    }
-    validate(instance=data, schema=schema)
+
+
