@@ -16,3 +16,5 @@
   - Fell behind due to contracts and moving.
   - Working on setting up nfs/efs system for ocr pipeline.
   - Never done this before, will be researching for next couple days while implementing
+  - <https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html>
+  - Set up S3 bucket and lambda function. Will start coding trigger/classifier tomorrow
