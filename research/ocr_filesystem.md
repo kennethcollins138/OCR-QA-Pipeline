@@ -8,7 +8,7 @@
   This is important for speed/accuracy tradeoff.
 - **OCR Processing**: Once classified, the document needs to be processed by the appropriate OCR service.
 - **Minimize Latency**: Reduce the time taken to download and process the files.
-- **Transition to Live Video Feeds**: Eventaully, the system should be capable of handling live video feed processing.
+- **Transition to Live Video Feeds**: Eventaully, the system should be capable of handling live video feed processing. Would take scan the page live.
 
 ## Idea Brainstorm
 
@@ -111,7 +111,7 @@
 #### File Upload and Storage
 
 1. **S3 Bucket:**
-   - Create an S3 bucket (e.g., `ocr-file-uploads`).
+   - Create an S3 bucket.
    - Configure bucket policies and permissions to allow Lambda and OCR containers access.
 
 2. **S3 Event Trigger:**
@@ -153,5 +153,5 @@
      - Define scaling policies to adjust the number of OCR containers dynamically.
 
 2. **Monitoring and Logging:**
-   - Set up monitoring (e.g., CloudWatch, Prometheus) to track performance and health.
+   - Set up monitoring  to track performance and health.
    - Configure logging (e.g., CloudWatch Logs, Elasticsearch) for troubleshooting and analysis.
